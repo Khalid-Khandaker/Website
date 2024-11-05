@@ -1,5 +1,11 @@
 //Importing Functions From firebase.js
-import { createProfessor, addSection, getSections, signOutUser, getAssignedStudents, deleteSection, renameSection, getClassSectionTable } from "./utils/firebase";
+import { FacebookAuthProvider } from "firebase/auth/web-extension";
+import { createProfessor, addSection, getSections, signOutUser, getAssignedStudents, deleteSection, updateClassSectionName, renameSection, getClassSectionTableDocuments } from "./utils/firebase";
+let addEntityClicks = [];
+let deleteQueue = [];
+let renameQueue = [];
+let renameQueueOne = [];
+let debounceTimeout;
 
 //Start of Admin Home Initializing DOM Elements Block
 const addEntityButton = document.querySelector(".add-entity-button");
@@ -37,324 +43,216 @@ const editStudentModal = document.querySelector('.edit-student-modal-container')
 
 //Start of Class Section Table Modals
 const addClassSectionModal = document.querySelector(".add-class-section-modal-container");
-const addSectionsForm = document.querySelector(".add-class-section-form");
+const addSectionForm = document.querySelector(".add-class-section-form");
 const classSectionTableDataContainer = document.querySelector('.class-section-table-data-container');
 const editClassSectionModal = document.querySelector('.edit-class-section-modal-container');
 const editClassSectionModalTableDataContainer = document.querySelector('.edit-class-section-modal-table-data-container');
+const editClassSectionModalDeleteButton = document.querySelector('.edit-class-section-modal-delete-button');
+const editClassSectionModalRenameButton = document.querySelector('.edit-class-section-modal-rename-button');
+const closeEditClassSectionModal = document.querySelector('.edit-class-section-close-container');
+const renameClassSectionModal = document.querySelector('.rename-section-modal-container');
+const renameClassSectionForm = document.querySelector('.rename-section-form');
 //End of Class Section Table Modals
 //End of Admin Home Initializing DOM Elements Block
 
-// initializeTables();
-// function initializeTables() {
-//     initializeProfessorTable();
-//     initializeStudentTable();
-//     initializeClassSectionTable();
+initializeHomepage();
+function initializeHomepage() {
+    // initializeProfessorTable();
+    // initializeStudentTable();
+    initializeClassSectionTable();
 
+    // wakeProfessorNavigationButton();
+    // wakeStudentNavigationButton();
+    wakeAddEntityButton("professor");
     
-// }
+    wakeClassSectionNavigationButton();//This will wake the addEntity button
+    wakeClassSectionTableDataContainer();
+}
 
-// function initializeProfessorTable() {
-//     getProfessorTableDocuments.then((tableData) => {
-//         tableData.forEach(data => {
-//             //Get table container and display the data
-//         });
-//     });
-// }
-// function initializeStudentTable() {
-//     getStudentTableDocuments.then((tableData) => {
-//         tableData.forEach(data => {
-//             //Get table container and display the data
-//         });
-//     });
-// }
-// function initializeClassSectionTable() {
-//     getClassSectionTable.then((tableData) => {
-//         tableData.forEach(data => {
-//             //Get table container and display the data
-//         });
-//     });
-// }
-
-// Helper Function to Create an Element and Set Its Text Content
-const createElementWithText = (tag, text, className) => {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
-    element.innerHTML = text;
-    return element;
-};
-
-function initializedSectionTable() {
-    getSections().then((sectionData) => {
-        sectionData.forEach((section) => {
+function initializeClassSectionTable() { //This function displays the latest class section table record.
+    classSectionTableDataContainer.innerHTML = "";
+    getClassSectionTableDocuments().then((sectionsData) => {
+        sectionsData.forEach((sectionData) => {
             const isDisplayed = Array.from(classSectionTableDataContainer.children).some(child => 
-                child.querySelector('.class-section-name-container p')?.textContent == section.name
+                child.querySelector('.class-section-name-container p')?.textContent == sectionData.name
             );
 
             if(!isDisplayed) {
                 // Create the main container
                 const classSectionTableData = createElementWithText('div', '', 'class-section-table-data');
                 // Create and append child containers
-                classSectionTableData.appendChild(createElementWithText('div', `<p>${section.name}</p>`, 'class-section-name-container'));
-                classSectionTableData.appendChild(createElementWithText('div', `<p>${section.studentCount} / 40</p>`, 'class-section-slot-container'));
-                classSectionTableData.appendChild(createElementWithText('div', `<p>${section.assignedTo}</p>`, 'class-section-assigned-to-container'));
+                classSectionTableData.appendChild(createElementWithText('div', `<p>${sectionData.name}</p>`, 'class-section-name-container'));
+                classSectionTableData.appendChild(createElementWithText('div', `<p>${sectionData.studentCount} / 40</p>`, 'class-section-slot-container'));
+                classSectionTableData.appendChild(createElementWithText('div', `<p>${sectionData.assignedTo}</p>`, 'class-section-assigned-to-container'));
+
                 classSectionTableDataContainer.appendChild(classSectionTableData); 
             }
         })
-    })
-}
-
-if (professorNavigationButton) {
-    professorNavigationButton.addEventListener('click', function (event) {
-        setActive(event);
-
-        addTableDataButton(event);
     });
 }
 
-if(studentNavigationButton) {
-    studentNavigationButton.addEventListener('click', function (event) {
-        setActive(event);
+function wakeClassSectionNavigationButton() {//Whenever the nav button is clicked it will also initialized the add entity button
+    classSectionNavigationButton.addEventListener('click', classSectionNavigationButtonHandler);
+} 
+function classSectionNavigationButtonHandler() {// Handles class section navigation button click
+    document.querySelector('.sections-text-container > p').style.setProperty('--after-background', '#ad1f48');
+    document.querySelector('.professors-text-container > p').style.setProperty('--after-background', 'transparent');
+    document.querySelector('.students-text-container > p').style.setProperty('--after-background', 'transparent');
+
+    classSectionTable.style.display = "grid"
+    professorTable.style.display = "none";
+    studentTable.style.display = "none";
     
-        addTableDataButton(event);
+    wakeAddEntityButton("classSection");
+
+    classSectionNavigationButton.removeEventListener('click', classSectionNavigationButtonHandler);
+    wakeClassSectionNavigationButton();
+}
+
+function wakeClassSectionTableDataContainer() {
+    classSectionTableDataContainer.addEventListener('click', classSectionTableDataContainerHandler);
+}
+function classSectionTableDataContainerHandler(classSectionTableDataContainerHanderEvent) {
+    const classSectionName = classSectionTableDataContainerHanderEvent.target.querySelector('.class-section-name-container').textContent;
+    editClassSectionModalTableDataContainer.innerHTML = "";
+    getAssignedStudents(classSectionName).then((assignedStudents) => {
+        assignedStudents.forEach((student) => {
+            const editClassSectionModalTableData = createElementWithText('div', '', 'edit-class-section-modal-table-data');
+            
+            editClassSectionModalTableData.appendChild(createElementWithText('div', `<p>${student.idNumber}</p>`, 'edit-class-section-modal-table-data-student-id'));
+            editClassSectionModalTableData.appendChild(createElementWithText('div', `<p>${student.name}</p>`, 'edit-class-section-modal-table-data-student-name'));
+            
+            editClassSectionModalTableDataContainer.appendChild(editClassSectionModalTableData);
+        });
+    }).catch((error) => {
+
+    });
+    
+    editClassSectionModal.style.display = "flex";
+
+    closeEditClassSectionModal.addEventListener('click', function () {
+        editClassSectionModal.style.display = "none";
+    });
+    wakeEditClassSectionModalDeleteButton(classSectionName);
+    wakeEditClassSectionModalRenameButton(classSectionName);
+}
+
+function wakeEditClassSectionModalRenameButton(classSectionName) {
+    editClassSectionModalRenameButton.addEventListener('click', () => editClassSectionModalRenameButtonHandler(classSectionName), {once : true});
+    renameQueue.push(classSectionName);
+}
+function editClassSectionModalRenameButtonHandler(classSectionName) {
+    if(renameQueue.length == 1) {
+        renameClassSectionModal.style.display = "flex";
+
+        document.querySelector('.rename-section-modal-close-container').addEventListener('click', function () {
+            renameClassSectionModal.style.display = "none";
+            wakeEditClassSectionModalRenameButton(classSectionName);
+        });
+
+        renameClassSectionForm.addEventListener('submit', (renameClassSectionFormHandlerEvent) => renameClassSectionFormHandler(renameClassSectionFormHandlerEvent, classSectionName), {once : true});
+        renameQueueOne.push(classSectionName);
+    }
+    renameQueue.pop();  
+}
+
+function renameClassSectionFormHandler(renameClassSectionFormHandlerEvent, classSectionName) {
+    if(renameQueueOne.length == 1) {
+        renameClassSectionFormHandlerEvent.preventDefault();
+
+        const newClassSectionName = renameClassSectionForm.new_class_section_name.value;
+    
+        updateClassSectionName(classSectionName, newClassSectionName).then((message) => {
+            console.log(message);
+            
+            initializeClassSectionTable();
+        });
+        renameClassSectionModal.style.display = "none";
+        editClassSectionModal.style.display = "none";
+        classSectionTableDataContainer.removeEventListener('click', classSectionTableDataContainerHandler);
+        wakeClassSectionTableDataContainer();
+    }
+    renameQueueOne.pop();
+}
+
+
+function wakeEditClassSectionModalDeleteButton(classSectionName) {
+    editClassSectionModalDeleteButton.addEventListener('click', () => editClassSectionModalDeleteButtonHandler(classSectionName), {once : true});
+    deleteQueue.push(classSectionName);
+}
+function editClassSectionModalDeleteButtonHandler(classSectionName) {
+    if(deleteQueue.length == 1) {
+        deleteSection(classSectionName).then((message) => {
+            console.log(message);
+            initializeClassSectionTable();
+        })
+        editClassSectionModal.style.display = "none";
+        classSectionTableDataContainer.removeEventListener('click', classSectionTableDataContainerHandler);
+        wakeClassSectionTableDataContainer();
+    }
+    deleteQueue.pop();
+}
+
+function wakeAddEntityButton(from) {
+    addEntityButton.addEventListener('click', () => {
+        addEntityHandler(from);
+
+        
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(() => {
+            addEntity();
+        }, 500);
     });
 }
 
-function setActive(event) {
-    if(event.target.textContent == "Professors") {
-        document.querySelector('.students-text-container > p').style.setProperty('--after-background', 'transparent');
-        document.querySelector('.professors-text-container > p').style.setProperty('--after-background', '#ad1f48');
-        document.querySelector('.sections-text-container > p').style.setProperty('--after-background', 'transparent');
-    
-        studentTable.style.display = "none";
-        professorTable.style.display = "grid";
-        classSectionTable.style.display = "none";
-    } else if (event.target.textContent == "Students") {
-        document.querySelector('.students-text-container > p').style.setProperty('--after-background', '#ad1f48');
-        document.querySelector('.professors-text-container > p').style.setProperty('--after-background', 'transparent');
-        document.querySelector('.sections-text-container > p').style.setProperty('--after-background', 'transparent');
-    
-        studentTable.style.display = "grid";
-        professorTable.style.display = "none";
-        classSectionTable.style.display = "none";
-    } else if (event.target.textContent == "Sections") {
-        document.querySelector('.sections-text-container > p').style.setProperty('--after-background', '#ad1f48');
-        document.querySelector('.professors-text-container > p').style.setProperty('--after-background', 'transparent');
-        document.querySelector('.students-text-container > p').style.setProperty('--after-background', 'transparent');
-    
-        classSectionTable.style.display = "grid"
-        professorTable.style.display = "none";
-        studentTable.style.display = "none";
+function addEntityHandler(from) {
+    addEntityClicks.push(from);
+}
+
+function addEntity() {
+    if (addEntityClicks[addEntityClicks.length - 1] === "professor") {
+        console.log("Add Professor");
+    } else if (addEntityClicks[addEntityClicks.length - 1] === "classSection") {
+        addSectionForm.addEventListener('submit', addSectionFormHandler);
+        addClassSectionModal.style.display = "flex";
+
+        console.log("Add Class Sections");
+
+        document.querySelector(".add-class-section-modal-close-container").addEventListener("click", function () {
+            addClassSectionModal.style.display = "none"; 
+        });
+    } else {
+        console.log("Add Student");
     }
 }
 
-if(classSectionNavigationButton) {//This if statement will execute once the admin homepage is displayed 
-    initializedSectionTable();//Load all sections to the table 
-
-    classSectionNavigationButton.addEventListener('click', function (event) { // If triggered will change the view to class section
-        setActive(event);//Changes underline color when clicked
- 
-        addTableDataButton(event);//Function for adding data to the table
-
-        classSectionTableDataContainer.addEventListener('click', function(classSectionTableEvent) {//Display class section data modal if clicked
-            const sectionName = classSectionTableEvent.target.querySelector('.class-section-name-container').textContent;
-
-            getAssignedStudents(sectionName).then((assignedStudents) => {
-                assignedStudents.forEach((student) => {
-                    const isDisplayed = Array.from(editClassSectionModalTableDataContainer.children).some(child => 
-                        child.querySelector('.edit-class-section-modal-table-data-student-id p')?.textContent === student.idnumber
-                    );
-                    
-                    if(!isDisplayed) {
-                        const editClassSectionModalTableData = createElementWithText('div', '', 'edit-class-section-modal-table-data');
-                    
-                        editClassSectionModalTableData.appendChild(createElementWithText('div', `<p>${student.idnumber}</p>`, 'edit-class-section-modal-table-data-student-id'));
-                        editClassSectionModalTableData.appendChild(createElementWithText('div', `<p>${student.name}</p>`, 'edit-class-section-modal-table-data-student-name'));
-                        
-                        editClassSectionModalTableDataContainer.appendChild(editClassSectionModalTableData);
-                    }
-                });
-            }).catch((error) => {
-
-            });
-            editClassSectionModal.style.display = "flex";
-
-            editClassSectionModal.addEventListener('click', (event) => {
-                if(event.target.textContent == "Delete") {
-                    deleteSection(sectionName).then((message) => {
-                        console.log(message);
-                        classSectionTableEvent.target.remove();
-                        editClassSectionModal.style.display = "none";
-                        initializedSectionTable();
-                    });
-                } else if (event.target.textContent == "Rename") {
-                    renameSection(sectionName).then((message) => {
-                        console.log(message);
-                        classSectionTableEvent.target.remove();
-                        editClassSectionModal.style.display = "none";
-                        initializedSectionTable();
-                    });
-                } else {
-                    console.log("Closed");
-                }
-            }, {once : true});
-
-            document.querySelector('.edit-class-section-close-container').addEventListener('click', function() {
-                editClassSectionModal.style.display = "none";
-            }, {once : true});
-        });
+function addSectionFormHandler(addSectionFormHandlerEvent) {
+    addSectionFormHandlerEvent.preventDefault();
+    
+    const classSectionName = addSectionForm.class_section_name.value;
+    
+    addSection(classSectionName).then(() => {
+        initializeClassSectionTable();
+        addSectionForm.reset();
+        addClassSectionModal.style = "none";
+    }).catch((err) => {
+        console.log(err.message);
     });
-}
+    
+    addSectionForm.removeEventListener('submit', addSectionFormHandler);
+    addEntityButton.removeEventListener('click', wakeAddEntityButton);
 
-if (professorTableData && editProfessorModal) {
-    professorTableData.addEventListener("click", function () {
-        editProfessorModal.style.display = "flex";
-        document.querySelector(".edit-professor-modal-close-container").addEventListener("click", function () {
-            professorTableData.removeEventListener;
-            this.removeEventListener;
-            editProfessorModal.style.display = "none";
-        });
-        document.querySelector('.edit-professor-modal-delete-button').addEventListener("click", function () {
-            confirmDeletionModal.style.display = "flex";
-            document.querySelector('.confirm-deletion-modal-close-container').addEventListener('click', function () {
-                confirmDeletionModal.style.display = "none";
-            });
-        });
-        if (addSectionButton && addSectionModal) {
-            addSectionButton.addEventListener("click", function () {
-                addSectionModal.style.display = "flex";
-                document
-                    .querySelector(".add-section-modal-close-container")
-                    .addEventListener("click", function () {
-                        this.removeEventListener;
-                        addSectionModal.style.display = "none";
-                    });
-            });
-        }
-        if (deleteSectionButton && deleteSectionModal) {
-            deleteSectionButton.addEventListener("click", function () {
-                deleteSectionModal.style.display = "flex";
-                document.querySelector(".delete-section-modal-close-container")
-                    .addEventListener("click", function () {
-                        this.removeEventListener;
-                        deleteSectionModal.style.display = "none";
-                    });
-            });
-        }
-    });
-}
-
-if (studentTableData) {
-    studentTableData.addEventListener('click', function () {
-        editStudentModal.style.display = "flex";
-        document.querySelector('.edit-student-modal-close-container').addEventListener('click', function () {
-            editStudentModal.style.display = 'none';
-        });
-        document.querySelector('.edit-student-modal-delete-button').addEventListener('click', function () {
-            confirmDeletionModal.style.display = 'flex';
-            confirmDeletionButton.addEventListener('click', function () {
-                confirmDeletionModal.style.display = 'none';
-                editStudentModal.style.display = 'none';
-            });
-        });
-    });
+    wakeAddEntityButton("classSection"); 
 }
 
 
-function addTableDataButton(event) {
-    addEntityButton.addEventListener("click", function () {
-        if (event === undefined || event.target.innerHTML == "Professors") {
-            addStudentModal.style.display = "none";
-            addClassSectionModal.style.display = "none";
-            addProfessorModal.style.display = "flex";
-            document.querySelector(".add-professor-modal-close-container").addEventListener("click", function () {
-                addEntityButton.removeEventListener;
-                this.removeEventListener;
-                addProfessorModal.style.display = "none";
-            });
-
-            removeSectionButton.addEventListener('click', function () {
-                removeSectionModal.style.display = "flex";
-                document.querySelector('.remove-section-modal-close-container').addEventListener('click', function () {
-                    removeSectionModal.style.display = "none";
-                });
-            });
-
-            assignSection.addEventListener("click", function () {
-                assignSectionModal.style.display = "flex";
-                document.querySelector(".assign-section-modal-close-container").addEventListener("click", function () {
-                    assignSection.removeEventListener;
-                    this.removeEventListener;
-                    assignSectionModal.style.display = "none";
-                });
-            });
-
-            addProfessorConfirm.addEventListener("click", () => {
-                const email = addProfessorForm.professor_email.value;
-                const password = addProfessorForm.professor_password.value;
-                const name = addProfessorForm.professor_name.value;
-                createProfessor(email, password, "professor").then(() => {
-                    addProfessorForm.reset();
-                    addProfessorModal.style = "none";
-                }).catch((err) => {
-                    console.log(err.message);
-                });
-            });
-        
-        } else if (event.target.innerHTML === "Students") {
-            addProfessorModal.style.display = "none";
-            addClassSectionModal.style.display = "none";
-            addStudentModal.style.display = "flex";
-            document.querySelector(".add-student-modal-close-container").addEventListener("click", function () {
-                addEntityButton.removeEventListener;
-                this.removeEventListener;
-                addStudentModal.style.display = "none";
-            });
-
-        } else if (event.target.innerHTML === "Sections") { 
-            addProfessorModal.style.display = "none";
-            addStudentModal.style.display = "none";
-            addClassSectionModal.style.display = "flex";
-
-            addSectionsForm.addEventListener('submit', (event) => {
-                event.preventDefault();
-
-                const name = addSectionsForm.class_section_name.value;
-
-                addSection(name).then(() => {
-                    addSectionsForm.reset();
-                    addClassSectionModal.style = "none";
-                    console.log("Section Created Successfully!");//Student subcollection cannot count 
-                }).catch((err) => {
-                    console.log(err.message);
-                });
-                initializedSectionTable();
-                addClassSectionModal.style.display = "none";
-            }, {once : true});
-            document.querySelector(".add-class-section-modal-close-container").addEventListener("click", function () {
-                addEntityButton.removeEventListener;
-                this.removeEventListener;
-                addClassSectionModal.style.display = "none"; 
-                window.location.reload();
-            });
-        }
-    });
-}
-
-
-//FOR UPDATING USER PASSWORD by ADMIN
-//const admin = require('firebase-admin');
-// const uid = 'USER_UID'; // The UID of the user whose password you want to change
-// const newPassword = 'newPassword123'; // The new password
-
-// admin.auth().updateUser(uid, {
-//     password: newPassword
-// })
-// .then((userRecord) => {
-//     console.log('Successfully updated user', userRecord.toJSON());
-// })
-// .catch((error) => {
-//     console.error('Error updating user:', error);
-// });
+// Helper Function to Create an Element and Set Its Text Content
+const createElementWithText = (tag, text, className) => {
+    const element = document.createElement(tag);
+    element.className = className;
+    element.innerHTML = text;
+    return element;
+};
 
 
 //If the logout button is insight execute the if statement.

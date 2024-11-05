@@ -74,20 +74,30 @@ const getProfessors = async () => {
  
 }
 
-export const addSection = async (name) => {
-    const sectionDocumentReference = await addDoc(collection(database, "sections"), {
-        name: name,
-        assignedTo: ""
-    });
-    const studentsSubcollectionReference = collection(sectionDocumentReference,"students");
-    await addDoc(studentsSubcollectionReference, {
-        idnumber : "202110233",
-        name : "Khandaker, Khalid Uzzaman T."
-    });
-}
+export const updateClassSectionName = async (oldClassSectionName, newClassSectionName) => {
+    const sectionsCollectionReference = collection(database, "classSections");
+    const sectionsQuery = query(sectionsCollectionReference, where("name", "==", oldClassSectionName));
+    
+    const sectionsSnapShot = await getDocs(sectionsQuery);
+
+    if (sectionsSnapShot.empty) {
+        throw new Error(`No document found with name: ${oldClassSectionName}`);
+    }
+
+    const documentRef = sectionsSnapShot.docs[0].ref;
+
+    try {
+        await updateDoc(documentRef, { name: newClassSectionName });
+        
+        return `Document name updated to ${newClassSectionName} successfully.`;
+    } catch (error) {
+        throw new Error(`Failed to update document: ${error.message}`);
+    }
+};
+
 
 export const getSections = async () => {
-    const sections = await getDocs(collection(database, "sections"));
+    const sections = await getDocs(collection(database, "classSections"));
     const sectionDataArray = [];
     
     for (const section of sections.docs) {
@@ -102,39 +112,63 @@ export const getSections = async () => {
     return sectionDataArray;
 }
 //Pwede na pag isahin sa isang function
-export const getAssignedStudents = async (classSectionName) => {
-    const sectionsReference = collection(database, "sections");
-    const sectionsQuery = query(sectionsReference, where("name", "==", classSectionName));
-    const sectionsSnapshot = await getDocs(sectionsQuery);
+//Subscribe snapshot to students subcollection and return their data
+export const getAssignedStudents = async (classSectionName) => { 
+    let assignedStudentsArray = [];
+    const classSectionsCollectionReference = collection(database, "classSections");
+    const classSectionQuery = query(classSectionsCollectionReference, where("name", "==", classSectionName));
+    const classSectionSnapshot = await getDocs(classSectionQuery);
 
-    const assignedStudentsArray = [];
+    const classSectionDocument = classSectionSnapshot.docs[0];     
+
+    const studentsSubcollectionReference = collection(classSectionDocument.ref, "students");
+    const studentsSnapshot = await getDocs(studentsSubcollectionReference);
+
+    // Step 4: Extract and return the student documents
+    studentsSnapshot.forEach((student) => {
+        const idNumber = student.data().idnumber;
+        const name = student.data().name;
+        assignedStudentsArray.push({name, idNumber});
+    });
     
-    if(!sectionsSnapshot.empty) {
-        const sectionDocument = sectionsSnapshot.docs[0];
-        const studentsSubcollectionReference = collection(sectionDocument.ref, "students");
-        const assignedStudentsSnapshot = await getDocs(studentsSubcollectionReference);
+    return assignedStudentsArray;
+    // Returns an array of document references matching the query
+    // const sectionsReference = collection(database, "classSections");
+    // const sectionsQuery = query(sectionsReference, where("name", "==", classSectionName));
+    // const sectionsSnapshot = await getDocs(sectionsQuery);
+
+    // const assignedStudentsArray = [];
+    
+    // if(!sectionsSnapshot.empty) {
+    //     const sectionDocument = sectionsSnapshot.docs[0];
+    //     const studentsSubcollectionReference = collection(sectionDocument.ref, "students");
+    //     const assignedStudentsSnapshot = await getDocs(studentsSubcollectionReference);
         
-        assignedStudentsSnapshot.forEach((students) => {
-            assignedStudentsArray.push(students.data());
-        });
-        return assignedStudentsArray;
-    } else {
-        //Throws message
-    }
+    //     assignedStudentsSnapshot.forEach((students) => {
+    //         assignedStudentsArray.push(students.data());
+    //     });
+    //     return assignedStudentsArray;
+    // } else {
+    //     //Throws message
+    // }
 }
 
 export const deleteSection = async (classSectionName) => {
-    const sectionsCollectionReference = collection(database, "sections");
+    const sectionsCollectionReference = collection(database, "classSections");
     const sectionsQuery = query(sectionsCollectionReference, where("name", "==", classSectionName));
     const sectionsSnapShot = await getDocs(sectionsQuery);
     
-    await deleteDoc(doc(database, "sections", sectionsSnapShot.docs[0].id));
+    if (sectionsSnapShot.empty) {
+        throw new Error("Document not found. Deletion cannot proceed.");
+    }
 
-    return "Docuemnt deleted successfully";
-}       
+    await deleteDoc(doc(database, "classSections", sectionsSnapShot.docs[0].id));
+
+    return "Document deleted successfully";
+};      
 
 export const renameSection = async (classSectionName) => {
-    const sectionsCollectionReference = collection(database, "sections");
+    const sectionsCollectionReference = collection(database, "classSections");
     const sectionsQuery = query(sectionsCollectionReference, where("name", "==", classSectionName));
     const sectionsSnapShot = await getDocs(sectionsQuery);
 
@@ -159,12 +193,41 @@ export const getProfessorTableDocuments =  async () => {
 export const getStudentTableDocuments =  async () => {
     //Return class section documents
 }
-export const getClassSectionTableDocuments =  async () => {
-    const classSectionCollectionReference = collection(database, "sections");
-    onSnapshot(classSectionCollectionReference, (classSectionsSnapshot) => {
-        let sections = [];
-        classSectionsSnapshot.docs.forEach((section) => {
-            
-        })
-    }); 
+export const addSection = async (classSectionName) => {
+    const sectionDocumentReference = await addDoc(collection(database, "classSections"), {
+        name: classSectionName,
+        assignedTo: ""
+    });
+    const studentsSubcollectionReference = collection(sectionDocumentReference,"students");
+    await addDoc(studentsSubcollectionReference, {
+        idnumber : "202110233",
+        name : "Khandaker, Khalid Uzzaman T."
+    });
+}
+
+export const getClassSectionTableDocuments = async () => {
+    const classSectionCollectionReference = collection(database, "classSections");
+    
+    return new Promise((resolve) => {
+        onSnapshot(classSectionCollectionReference, async (classSectionsSnapshot) => {
+            let sectionsData = [];
+
+            const promises = classSectionsSnapshot.docs.map(async (section) => {
+                const name = section.data().name;
+                const assignedTo = section.data().assignedTo;
+
+                const studentCount = await countSubcollection(section.ref, "students");
+
+                return { name, assignedTo, studentCount };  
+            });
+            sectionsData = await Promise.all(promises);
+            resolve(sectionsData);
+        });
+    });
+};
+
+async function countSubcollection(documentReference, subCollectionName) {
+    const studentsSubcollectionReference = collection(documentReference, subCollectionName);
+    const studentCountSnapshot = await getCountFromServer(studentsSubcollectionReference);
+    return studentCountSnapshot.data().count;
 }

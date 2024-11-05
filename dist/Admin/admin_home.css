@@ -157,7 +157,7 @@ body {
 .professor-table-data {
     height: 35px;
 
-    display: grid;
+    display: none;
     grid-template-columns: 1fr 1fr;
     justify-items: center;
     align-items: center;
@@ -233,7 +233,7 @@ body {
 
     overflow-y: auto;
 
-    display: grid;
+    display: none;
     grid-template-columns: repeat(auto-fill 1fr);
     row-gap: 6px;
 }
@@ -2050,4 +2050,116 @@ body {
 
 .transparent-background {
     background-color: transparent;
+}
+.rename-section-modal-container {
+    height: 100vh;
+
+    display: none;
+    justify-content: center;
+    align-items: center;
+
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    background-color: #0c001248;
+
+    z-index: 2;
+}
+.rename-section-modal {
+    border: 2px solid #240042;
+
+    background-color: #0c0012;
+
+    box-sizing: border-box;
+    padding: 6px 12px;
+}
+.rename-section-modal-top-section {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+
+    column-gap: 100px;
+
+    margin-bottom: 20px;
+}
+.rename-section-modal-title p {
+    font-size: 18px;
+    font-weight: 400;
+
+    color: #cacaca;
+
+    margin: 0px;
+}
+.rename-section-modal-close-container {
+    width: 16px;
+    height: 16px;
+
+    overflow: hidden;
+}
+.rename-section-modal-close-container:hover {
+    cursor: pointer;
+}
+.rename-section-modal-close-container img {
+    width: 100%; 
+    height: 100%;
+
+    object-fit: contain;
+}
+.rename-section-modal-middle-section {
+    display: flex;
+    margin-bottom: 15px;
+}
+.rename-section-modal-section-container p {
+    font-size: 16px;
+    font-weight: 200;
+
+    color: #cacaca;
+
+    margin: 0px;
+    margin-right: 10px;
+}
+.rename-section-modal-middle-section input {
+    border: none;
+    border-bottom: 1px solid #9a9a9a;
+
+    background-color: transparent;
+    color: #fe8f01;
+
+    font-size: 14px;
+
+    flex: 1;
+}
+.rename-section-modal-middle-section input:focus {
+    outline: none;
+}
+.rename-section-modal-middle-section input::placeholder {
+    color: #873510;
+}
+.rename-section-modal-bottom-section {
+    display: flex;
+    flex-direction: row;
+    justify-content: end;
+}
+.rename-section-modal-confirm-button {
+    padding: 4px 16px;
+    border: 2px solid #470c77; 
+
+    font-size: 16px;
+    width: max-content;
+
+    transition: border-radius 0.2s;
+}
+.rename-section-modal-confirm-button:hover {
+    cursor: pointer; 
+    background-color: #1b0229;
+    border-radius: 6px;
+}
+.rename-section-modal-confirm-button p {
+    margin: 0px;
+    font-weight: 500;
+    color: #cacaca;
 }

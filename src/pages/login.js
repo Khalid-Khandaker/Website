@@ -13,7 +13,8 @@ if(loginForm) {
 
         const username = loginForm.username.value;
         const password = loginForm.password.value;
-        signIn(username,password).then((homepage) => {
+        
+        signIn(username, password).then((homepage) => {
             window.location.href = homepage;
         });
     });
